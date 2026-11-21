@@ -76,6 +76,13 @@ class SettingsRepository {
             prefs.putInt("download_retry_count", value.coerceIn(0, 10))
         }
 
+    /** YunX Mini 空闲退出分钟数（0 = 不自动退出；默认 10，范围 0-120） */
+    var miniIdleMinutes: Int
+        get() = prefs.getInt("mini_idle_minutes", 10)
+        set(value) {
+            prefs.putInt("mini_idle_minutes", value.coerceIn(0, 120))
+        }
+
     /** 下载时阻止电脑休眠（Windows：任务运行中 SetThreadExecutionState 阻止系统睡眠） */
     var keepAwakeWhileDownloading: Boolean
         get() = prefs.getBoolean("keep_awake_downloading", prefs.getBoolean("keep_download_when_locked", true))

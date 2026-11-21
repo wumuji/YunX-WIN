@@ -1,4 +1,4 @@
-; YunX-WIN installer script (Inno Setup 6)
+﻿; YunX-WIN installer script (Inno Setup 6)
 ; Compiled by installer-package.ps1 with /DAppVersion=x.y.z
 ; Source: the portable output folder (release\YunX-WIN\) which already contains
 ; the custom launcher and skiko native libs.
@@ -50,6 +50,34 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "..\release\YunX-WIN\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
+
+[Registry]
+; YunX Fetch 扩展的 native messaging host：按需唤醒 YunX Mini / 完整版
+Root: HKCU; Subkey: "Software\Microsoft\Edge\NativeMessagingHosts\com.yunx.mini"; ValueType: string; ValueName: ""; ValueData: "{app}\native-host\com.yunx.mini.json"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Google\Chrome\NativeMessagingHosts\com.yunx.mini"; ValueType: string; ValueName: ""; ValueData: "{app}\native-host\com.yunx.mini.json"; Flags: uninsdeletekey
+
+[Code]
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  HostPath, ManifestPath, Content: String;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    HostPath := ExpandConstant('{app}\native-host\YunX-MiniHost.exe');
+    ManifestPath := ExpandConstant('{app}\native-host\com.yunx.mini.json');
+    if FileExists(HostPath) then
+    begin
+      { JSON 里反斜杠要转义；StringChangeEx 原地改字符串并返回是否改动 }
+      StringChangeEx(HostPath, '\', '\\', True);
+      Content := '{"name":"com.yunx.mini","description":"YunX Mini / YunX WIN launcher","path":"' +
+        HostPath +
+        '","type":"stdio","allowed_origins":["chrome-extension://eoljolhfmkeekiagjocohmoklfdgldcj/"]}';
+      { 浏览器只按 UTF-8 解析清单：必须用 SaveStringsToUTF8File；
+        SaveStringToFile 在这个版本里始终按 ANSI/GBK 写，安装路径含中文时会变成非法 UTF-8 }
+      SaveStringsToUTF8File(ManifestPath, [Content], False);
+    end;
+  end;
+end;
 
 [Icons]
 ; MessageBox 之外，Windows 通知（toast）也依赖开始菜单里存在带 AppUserModelID 的快捷方式；

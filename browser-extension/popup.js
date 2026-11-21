@@ -9,9 +9,6 @@
 
 const $ = (id) => document.getElementById(id);
 
-/** 外观偏好存储键；取值 auto | light | dark */
-const THEME_KEY = 'theme';
-
 /** 分类显示名（与 background.js 保持一致） */
 const CATEGORY_LABELS = {
   image: '图片', video: '视频', audio: '音频', document: '文档',
@@ -98,56 +95,11 @@ function setStatus(text, cls) {
 let currentTab = null;
 
 /** 资源与筛选状态 */
-const state = { all: [], filter: 'all' };
+const state = { all: [], filter: 'all', tasks: [], tab: 'downloads', settings: {} };
 
-// ---------------------------------------------------------------- 外观
-
-/**
- * 应用外观：把 data-theme 写到 <html> 上。
- * auto 时不写具体配色，交给 CSS 的 prefers-color-scheme 媒体查询跟随浏览器，
- * 浏览器切换亮/暗时无需 JS 参与即可实时生效。
- */
-function applyTheme(mode) {
-  const m = (mode === 'light' || mode === 'dark') ? mode : 'auto';
-  document.documentElement.dataset.theme = m;
-  const btns = document.querySelectorAll('#theme-seg .seg-btn');
-  for (const b of btns) b.classList.toggle('active', b.dataset.themeValue === m);
-}
-
-/**
- * 带过渡地应用外观。
- *
- * 配色切换本身是瞬时的（CSS 变量不参与动画），CSS 里那条全局 transition 只能平滑
- * 「颜色属性」的变化；这里再用 View Transitions 把整页做成一次交叉淡变，观感更完整。
- * 浏览器不支持 startViewTransition 时直接切（CSS 过渡仍生效），失败也兜底直切。
- */
-function commitTheme(mode) {
-  const apply = () => applyTheme(mode);
-  if (typeof document.startViewTransition === 'function') {
-    try { document.startViewTransition(apply); return; } catch (e) { /* 兜底直切 */ }
-  }
-  apply();
-}
-
-async function loadTheme() {
-  let mode = 'auto';
-  try {
-    const o = await chrome.storage.local.get(THEME_KEY);
-    if (o && typeof o[THEME_KEY] === 'string') mode = o[THEME_KEY];
-  } catch (e) { /* 读取失败则用默认 */ }
-  // 打开弹窗时不做过渡动画，直接落到目标配色
-  applyTheme(mode);
-}
-
-function bindTheme() {
-  const btns = document.querySelectorAll('#theme-seg .seg-btn');
-  for (const b of btns) {
-    b.addEventListener('click', () => {
-      const mode = b.dataset.themeValue;
-      commitTheme(mode);
-      try { chrome.storage.local.set({ [THEME_KEY]: mode }); } catch (e) { /* ignore */ }
-    });
-  }
+/** 主题固定跟随浏览器：外观设置在下载中心里配置，弹窗不再提供切换 */
+function applySystemTheme() {
+  document.documentElement.dataset.theme = 'auto';
 }
 
 // ---------------------------------------------------------------- 资源渲染
@@ -281,7 +233,7 @@ function makeItem(r) {
 
   const btn = document.createElement('button');
   btn.className = 'dl-btn';
-  btn.textContent = '云析下载';
+  btn.textContent = '下载';
   btn.addEventListener('click', async () => {
     btn.disabled = true;
     btn.textContent = '处理中';
@@ -295,7 +247,7 @@ function makeItem(r) {
     });
     if (!resp || !resp.ok) {
       btn.disabled = false;
-      btn.textContent = '云析下载';
+      btn.textContent = '下载';
       $('hint').textContent = (resp && resp.error) || '提交失败：请确认云析正在运行。';
       return;
     }
@@ -304,11 +256,11 @@ function makeItem(r) {
       $('hint').textContent = '已交给云析下载（在云析弹窗里确认保存目录与线程数）。';
     } else if (resp.action === 'return') {
       btn.disabled = false;
-      btn.textContent = '云析下载';
+      btn.textContent = '下载';
       $('hint').textContent = '云析未接管，已归还浏览器下载。';
     } else {
       btn.disabled = false;
-      btn.textContent = '云析下载';
+      btn.textContent = '下载';
     }
   });
 
@@ -438,7 +390,7 @@ async function loadVideoCard(tab) {
   $('video-hint').textContent = '';
   $('vcard-fields').hidden = !pf.quality;
   $('video-download').disabled = false;
-  $('video-download').textContent = '交给云析下载';
+  $('video-download').textContent = '交给 YunX 下载';
 
   // 只有 B 站能从页面里读到清晰度；其余平台直接用标签页标题，交给云析解析
   if (!pf.quality) {
@@ -595,20 +547,13 @@ function bindCooldown() {
 
 // ---------------------------------------------------------------- 数据加载
 
-async function loadSettings() {
-  const resp = await send({ type: 'yunx-get-settings' });
-  const s = (resp && resp.settings) || { enabled: true, hijack: true, sniff: true };
-  $('sw-enabled').checked = !!s.enabled;
-  $('sw-hijack').checked = !!s.hijack;
-  $('sw-sniff').checked = !!s.sniff;
-}
-
 async function loadStatus() {
   const resp = await send({ type: 'yunx-status' });
   if (resp && resp.connected) {
-    setStatus('云析已连接（端口 ' + resp.port + '）', 'on');
+    const mode = resp.mode === 'mini' ? 'YunX Mini' : 'YunX 完整版';
+    setStatus(mode + ' 已连接', 'on');
   } else {
-    setStatus('未检测到云析，请先启动云析', 'off');
+    setStatus('未检测到引擎，将使用浏览器下载', 'off');
   }
 }
 
@@ -617,22 +562,211 @@ async function loadResources() {
   const tabId = currentTab ? currentTab.id : -1;
   const resp = await send({ type: 'yunx-get-resources', tabId: tabId });
   renderResources((resp && resp.resources) || []);
+  const badge = $('res-count');
+  const total = state.all.length;
+  badge.hidden = total === 0;
+  badge.textContent = String(total);
+}
+
+// ---------------------------------------------------------------- 下载中心
+
+function fmtSpeed(n) {
+  if (!n || n <= 0) return '';
+  return fmtSize(n) + '/s';
+}
+
+function fmtEta(ms) {
+  if (!ms || ms <= 0) return '';
+  const total = Math.round(ms / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return h > 0
+    ? h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0')
+    : m + ':' + String(s).padStart(2, '0');
+}
+
+function percentOf(task) {
+  if (task.status === 'completed') return 100;
+  if (!task.size || task.size <= 0) return 0;
+  return Math.min(100, Math.round((task.downloaded / task.size) * 100));
+}
+
+function taskMeta(task) {
+  if (task.status === 'completed') return fmtSize(task.size || task.downloaded);
+  if (task.status === 'failed') return task.error || '失败';
+  const parts = [];
+  if (task.size > 0) parts.push(percentOf(task) + '% · ' + fmtSize(task.downloaded) + ' / ' + fmtSize(task.size));
+  else parts.push(fmtSize(task.downloaded));
+  if (task.status === 'downloading' && task.speed > 0) parts.push(fmtSpeed(task.speed));
+  if (task.status === 'downloading' && task.etaMs > 0) parts.push('剩余 ' + fmtEta(task.etaMs));
+  if (task.status === 'paused') parts.push('已暂停');
+  if (task.status === 'pending') parts.push('等待中');
+  return parts.join(' · ');
+}
+
+function taskNode(task) {
+  const row = document.createElement('div');
+  row.className = 't-item';
+
+  const head = document.createElement('div');
+  head.className = 't-head';
+  const name = document.createElement('span');
+  name.className = 't-name';
+  name.textContent = task.name || 'download';
+  name.title = task.name || '';
+  const tag = document.createElement('span');
+  const engineLabels = { mini: 'YunX Mini', full: 'YunX 完整版', browser: '浏览器' };
+  tag.className = 't-tag' +
+    (task.engine === 'browser' ? ' browser' : '') +
+    (task.status === 'failed' ? ' failed' : '') +
+    (task.status === 'completed' ? ' completed' : '');
+  tag.textContent = engineLabels[task.engine] || task.engine;
+  head.appendChild(name);
+  head.appendChild(tag);
+
+  const bar = document.createElement('div');
+  bar.className = 't-bar';
+  const fill = document.createElement('i');
+  fill.style.width = percentOf(task) + '%';
+  bar.appendChild(fill);
+
+  const meta = document.createElement('div');
+  meta.className = 't-meta';
+  const metaText = document.createElement('span');
+  metaText.textContent = taskMeta(task);
+  const site = document.createElement('span');
+  site.className = 'site';
+  site.textContent = task.site || '';
+  meta.appendChild(metaText);
+  meta.appendChild(site);
+
+  row.appendChild(head);
+  row.appendChild(bar);
+  row.appendChild(meta);
+
+  const acts = document.createElement('div');
+  acts.className = 't-acts';
+  const action = (label, name2, options = {}) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 't-btn' + (options.danger ? ' danger' : '');
+    btn.textContent = label;
+    btn.addEventListener('click', async () => {
+      const deleteLocal = Boolean(state.settings?.deleteFileOnRemove);
+      if (options.confirm && !state.settings?.skipDeleteConfirm) {
+        const hint = name2 === 'remove'
+          ? (deleteLocal ? '（同时删除本地文件）' : '（保留本地文件）')
+          : '';
+        if (!window.confirm(`删除任务「${task.name}」${hint}？`)) return;
+      }
+      btn.disabled = true;
+      const payload = { type: 'fetch.task.action', id: task.id, action: name2 };
+      if (name2 === 'remove') payload.deleteLocal = deleteLocal;
+      const resp = await send(payload);
+      if (resp && resp.ok === false) $('hint').textContent = resp.error || '操作失败';
+      else if (name2 === 'remove') $('hint').textContent = deleteLocal ? '已删除任务与本地文件' : '已删除任务（文件已保留）';
+      await loadTasks();
+    });
+    acts.appendChild(btn);
+  };
+  if (task.status === 'downloading' || task.status === 'pending') action('暂停', 'pause');
+  if (task.status === 'paused') action('继续', 'resume');
+  if (task.status === 'failed') action('重试', 'retry');
+  if (task.status === 'completed') action('打开', 'open');
+  action('删除', 'remove', { danger: true, confirm: true });
+  row.appendChild(acts);
+  return row;
+}
+
+function renderTasks(summary) {
+  const box = $('task-list');
+  const active = state.tasks.filter((t) => ['downloading', 'pending', 'paused', 'failed'].includes(t.status));
+  const recent = state.tasks.filter((t) => t.status === 'completed').slice(0, 2);
+  const list = [...active, ...recent];
+
+  const badge = $('task-count');
+  badge.hidden = active.length === 0;
+  badge.textContent = String(active.length);
+
+  $('dl-summary').textContent = active.length
+    ? active.length + ' 个任务进行中'
+    : list.length ? '最近完成 ' + list.length + ' 个任务' : '暂无下载任务';
+  $('dl-speed').textContent = summary && summary.totalSpeed > 0 ? fmtSpeed(summary.totalSpeed) : '';
+
+  box.replaceChildren();
+  if (!list.length) {
+    const empty = document.createElement('div');
+    empty.className = 't-empty';
+    const title = document.createElement('b');
+    title.textContent = '暂无下载任务';
+    empty.appendChild(title);
+    empty.appendChild(document.createTextNode('在网页中点击下载，任务会出现在这里'));
+    box.appendChild(empty);
+    return;
+  }
+  for (const task of list) box.appendChild(taskNode(task));
+}
+
+async function loadTasks() {
+  const resp = await send({ type: 'fetch.tasks.list' });
+  state.tasks = (resp && resp.tasks) || [];
+  renderTasks(resp && resp.summary);
+}
+
+/** 任务操作需要知道「删除时是否连本地文件一起删」，只读一次即可 */
+async function loadTaskSettings() {
+  const resp = await send({ type: 'fetch.settings.get' });
+  if (resp && resp.ok) state.settings = resp.settings || {};
+}
+
+// ---------------------------------------------------------------- 标签页
+
+let resourcesLoaded = false;
+
+async function loadResourcesOnce() {
+  if (resourcesLoaded) return;
+  resourcesLoaded = true;
+  await loadResources();
+  await loadVideoCard(currentTab);
+  await loadCooldown(currentTab);
+}
+
+function showTab(name) {
+  state.tab = name === 'resources' ? 'resources' : 'downloads';
+  for (const tab of document.querySelectorAll('.tab')) {
+    const active = tab.dataset.tab === state.tab;
+    tab.classList.toggle('active', active);
+    tab.setAttribute('aria-selected', active ? 'true' : 'false');
+  }
+  $('pane-downloads').hidden = state.tab !== 'downloads';
+  $('pane-resources').hidden = state.tab !== 'resources';
+  $('refresh').hidden = state.tab !== 'resources';
+  if (state.tab === 'resources') loadResourcesOnce().catch(() => {});
+}
+
+function bindTabs() {
+  for (const tab of document.querySelectorAll('.tab')) {
+    tab.addEventListener('click', () => showTab(tab.dataset.tab));
+  }
 }
 
 // ---------------------------------------------------------------- 事件
 
-function bindSwitches() {
-  const bind = (id, key) => {
-    $(id).addEventListener('change', async () => {
-      const patch = {};
-      patch[key] = $(id).checked;
-      await send({ type: 'yunx-set-settings', settings: patch });
-    });
-  };
-  bind('sw-enabled', 'enabled');
-  bind('sw-hijack', 'hijack');
-  bind('sw-sniff', 'sniff');
-}
+$('open-manager-2').addEventListener('click', async () => {
+  await send({ type: 'fetch.manager.open' });
+  window.close();
+});
+
+$('open-folder').addEventListener('click', async () => {
+  const resp = await send({ type: 'fetch.downloads.folder' });
+  if (!resp || resp.ok === false) $('hint').textContent = (resp && resp.error) || '无法打开下载文件夹';
+});
+
+$('open-settings').addEventListener('click', async () => {
+  await send({ type: 'fetch.manager.open', section: 'settings' });
+  window.close();
+});
 
 $('refresh').addEventListener('click', async () => {
   $('hint').textContent = '正在刷新…';
@@ -640,19 +774,28 @@ $('refresh').addEventListener('click', async () => {
   await loadResources();
   await loadVideoCard(currentTab);
   await loadCooldown(currentTab);
-  $('hint').textContent = '资源列表仅在本机与云析之间传递，不上传任何数据。';
+  $('hint').textContent = '任务与设置只保存在本机，不上传任何数据。';
 });
 
+let pollTimer = null;
+function startPolling() {
+  clearInterval(pollTimer);
+  pollTimer = setInterval(() => {
+    if (document.hidden) return;
+    loadTasks().catch(() => {});
+  }, 1200);
+  window.addEventListener('pagehide', () => clearInterval(pollTimer));
+}
+
 (async function init() {
-  bindTheme();
-  loadTheme();
-  bindSwitches();
+  applySystemTheme();
+  bindTabs();
   bindPreview();
   bindVideoCard();
   bindCooldown();
-  await loadSettings();
   await loadStatus();
-  await loadResources();
-  await loadVideoCard(currentTab);
-  await loadCooldown(currentTab);
+  await loadTaskSettings();
+  await loadTasks();
+  showTab('downloads');
+  startPolling();
 })();

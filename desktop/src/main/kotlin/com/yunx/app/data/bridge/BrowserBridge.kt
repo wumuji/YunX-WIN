@@ -109,6 +109,21 @@ object BrowserBridge {
     /** 交给 UI 层处理一条其他平台请求；未注册消费者时按未受理返回 */
     fun dispatchVideo(req: VideoRequest): Boolean = onVideoRequest?.invoke(req) ?: false
 
+    /**
+     * 扩展主动提交的「分享链接解析」请求（网盘 / GitHub 等）。
+     * 完整版收到后切到解析页并开始解析。
+     */
+    data class ResolveRequest(
+        val url: String,
+        val title: String
+    )
+
+    /** 分享链接解析请求的消费者（由 UI 层注册）；返回是否已受理 */
+    @Volatile
+    var onResolveRequest: ((ResolveRequest) -> Boolean)? = null
+
+    fun dispatchResolve(req: ResolveRequest): Boolean = onResolveRequest?.invoke(req) ?: false
+
     private val seq = AtomicLong(0)
 
     private val _pending = MutableStateFlow<List<HookRequest>>(emptyList())

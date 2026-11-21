@@ -2,9 +2,11 @@ package com.yunx.app.data.bridge
 
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
+import com.yunx.app.APP_VERSION
 import com.yunx.app.util.Log
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.InetSocketAddress
 import java.nio.charset.StandardCharsets
@@ -96,6 +98,10 @@ object BrowserBridgeServer {
         server.createContext("/hook", ::handleHook)
         server.createContext("/bili", ::handleBili)
         server.createContext("/video", ::handleVideo)
+        server.createContext("/tasks", ::handleTasks)
+        server.createContext("/task/action", ::handleTaskAction)
+        server.createContext("/enqueue", ::handleEnqueue)
+        server.createContext("/resolve", ::handleResolve)
     }
 
     // ---------------- 请求处理 ----------------
@@ -110,8 +116,21 @@ object BrowserBridgeServer {
                 ex, 200,
                 JSONObject()
                     .put("app", "yunx")
-                    .put("api", 1)
+                    .put("mode", "full")
+                    .put("api", 2)
+                    .put("version", APP_VERSION)
                     .put("token", token)
+                    .put(
+                        "capabilities",
+                        JSONObject()
+                            .put("direct", true)
+                            .put("hls", true)
+                            .put("netdisk", true)
+                            .put("video", true)
+                            .put("p2p", true)
+                            .put("github", true)
+                            .put("tasks", true)
+                    )
                     .toString()
             )
         } finally {
@@ -277,6 +296,224 @@ object BrowserBridgeServer {
             ex.close()
         }
     }
+
+    /** GET /tasks：扩展下载中心读取完整版任务快照 */
+    private fun handleTasks(ex: HttpExchange) {
+        try {
+            if (!applyCors(ex, json = true)) {
+                respond(ex, 403, """{"error":"forbidden origin"}""")
+                return
+            }
+            if (ex.requestMethod.equals("OPTIONS", ignoreCase = true)) {
+                respond(ex, 204, "")
+                return
+            }
+            if (!ex.requestMethod.equals("GET", ignoreCase = true)) {
+                respond(ex, 405, """{"error":"method not allowed"}""")
+                return
+            }
+            if (!tokenMatches(ex)) {
+                respond(ex, 401, """{"error":"bad token"}""")
+                return
+            }
+            if (BridgeTaskController.snapshotProvider == null) {
+                respond(ex, 503, """{"ok":false,"error":"ui-not-ready"}""")
+                return
+            }
+            val array = JSONArray()
+            BridgeTaskController.snapshot().forEach { array.put(it.toJson()) }
+            respond(
+                ex, 200,
+                JSONObject()
+                    .put("ok", true)
+                    .put("mode", "full")
+                    .put("tasks", array)
+                    .toString()
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "tasks 处理异常: ${e.javaClass.simpleName}: ${e.message}")
+            runCatching { respond(ex, 500, """{"ok":false,"error":"internal"}""") }
+        } finally {
+            ex.close()
+        }
+    }
+
+    /** POST /task/action：暂停 / 继续 / 重试 / 删除 / 打开 / 所在文件夹 */
+    private fun handleTaskAction(ex: HttpExchange) {
+        try {
+            if (!applyCors(ex, json = true)) {
+                respond(ex, 403, """{"error":"forbidden origin"}""")
+                return
+            }
+            if (ex.requestMethod.equals("OPTIONS", ignoreCase = true)) {
+                respond(ex, 204, "")
+                return
+            }
+            if (!ex.requestMethod.equals("POST", ignoreCase = true)) {
+                respond(ex, 405, """{"error":"method not allowed"}""")
+                return
+            }
+            if (!tokenMatches(ex)) {
+                respond(ex, 401, """{"error":"bad token"}""")
+                return
+            }
+            val json = runCatching {
+                JSONObject(ex.requestBody.readBytes().toString(StandardCharsets.UTF_8))
+            }.getOrNull()
+            if (json == null) {
+                respond(ex, 400, """{"ok":false,"error":"bad json"}""")
+                return
+            }
+            val id = json.optLong("id", 0L)
+            val action = json.optString("action").trim()
+            if (id <= 0L || action.isEmpty()) {
+                respond(ex, 400, """{"ok":false,"error":"missing id/action"}""")
+                return
+            }
+            if (BridgeTaskController.actionHandler == null) {
+                respond(ex, 503, """{"ok":false,"error":"ui-not-ready"}""")
+                return
+            }
+            val ok = BridgeTaskController.action(id, action, json.optBoolean("deleteLocal", false))
+            respond(ex, 200, JSONObject().put("ok", ok).toString())
+        } catch (e: Exception) {
+            Log.w(TAG, "task/action 处理异常: ${e.javaClass.simpleName}: ${e.message}")
+            runCatching { respond(ex, 500, """{"ok":false,"error":"internal"}""") }
+        } finally {
+            ex.close()
+        }
+    }
+
+    /** POST /enqueue：扩展直链静默入队，不再弹完整版确认框 */
+    private fun handleEnqueue(ex: HttpExchange) {
+        try {
+            if (!applyCors(ex, json = true)) {
+                respond(ex, 403, """{"error":"forbidden origin"}""")
+                return
+            }
+            if (ex.requestMethod.equals("OPTIONS", ignoreCase = true)) {
+                respond(ex, 204, "")
+                return
+            }
+            if (!ex.requestMethod.equals("POST", ignoreCase = true)) {
+                respond(ex, 405, """{"error":"method not allowed"}""")
+                return
+            }
+            if (!tokenMatches(ex)) {
+                respond(ex, 401, """{"error":"bad token"}""")
+                return
+            }
+            val json = runCatching {
+                JSONObject(ex.requestBody.readBytes().toString(StandardCharsets.UTF_8))
+            }.getOrNull()
+            if (json == null) {
+                respond(ex, 400, """{"ok":false,"error":"bad json"}""")
+                return
+            }
+            val url = json.optString("url").trim()
+            if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) {
+                respond(ex, 400, """{"ok":false,"code":"UNSUPPORTED","reason":"只支持 HTTP(S) 直链"}""")
+                return
+            }
+            val headers = buildMap {
+                val headerObject = json.optJSONObject("headers")
+                if (headerObject != null) {
+                    val keys = headerObject.keys()
+                    while (keys.hasNext()) {
+                        val key = keys.next()
+                        val value = headerObject.optString(key)
+                        if (value.isNotBlank()) put(key, value)
+                    }
+                }
+                if (get("Cookie").isNullOrBlank() && json.optString("cookie").isNotBlank()) {
+                    put("Cookie", json.optString("cookie"))
+                }
+                if (get("Referer").isNullOrBlank()) {
+                    val referer = json.optString("referer").ifBlank { json.optString("pageUrl") }
+                    if (referer.isNotBlank()) put("Referer", referer)
+                }
+                if (get("User-Agent").isNullOrBlank() && json.optString("userAgent").isNotBlank()) {
+                    put("User-Agent", json.optString("userAgent"))
+                }
+            }
+            val req = BridgeEnqueueRequest(
+                url = url,
+                fileName = json.optString("fileName").ifBlank { fileNameFromUrl(url) },
+                fileSize = json.optLong("fileSize", -1L),
+                headers = headers,
+                saveDir = json.optString("saveDir"),
+                threads = json.optInt("threads", 0),
+                platform = json.optString("platform")
+            )
+            if (BridgeTaskController.enqueueHandler == null) {
+                respond(ex, 503, """{"ok":false,"error":"ui-not-ready"}""")
+                return
+            }
+            val ok = BridgeTaskController.enqueue(req)
+            respond(ex, if (ok) 200 else 500, JSONObject().put("ok", ok).toString())
+        } catch (e: Exception) {
+            Log.w(TAG, "enqueue 处理异常: ${e.javaClass.simpleName}: ${e.message}")
+            runCatching { respond(ex, 500, """{"ok":false,"error":"internal"}""") }
+        } finally {
+            ex.close()
+        }
+    }
+
+    /** POST /resolve：网盘 / GitHub 分享链接转完整版解析页 */
+    private fun handleResolve(ex: HttpExchange) {
+        try {
+            if (!applyCors(ex, json = true)) {
+                respond(ex, 403, """{"error":"forbidden origin"}""")
+                return
+            }
+            if (ex.requestMethod.equals("OPTIONS", ignoreCase = true)) {
+                respond(ex, 204, "")
+                return
+            }
+            if (!ex.requestMethod.equals("POST", ignoreCase = true)) {
+                respond(ex, 405, """{"error":"method not allowed"}""")
+                return
+            }
+            if (!tokenMatches(ex)) {
+                respond(ex, 401, """{"error":"bad token"}""")
+                return
+            }
+            val json = runCatching {
+                JSONObject(ex.requestBody.readBytes().toString(StandardCharsets.UTF_8))
+            }.getOrNull()
+            if (json == null) {
+                respond(ex, 400, """{"ok":false,"error":"bad json"}""")
+                return
+            }
+            val url = json.optString("url").trim()
+            if (url.isEmpty()) {
+                respond(ex, 400, """{"ok":false,"error":"missing url"}""")
+                return
+            }
+            val accepted = BrowserBridge.dispatchResolve(
+                BrowserBridge.ResolveRequest(url = url, title = json.optString("title"))
+            )
+            respond(ex, 200, JSONObject().put("ok", accepted).toString())
+        } catch (e: Exception) {
+            Log.w(TAG, "resolve 处理异常: ${e.javaClass.simpleName}: ${e.message}")
+            runCatching { respond(ex, 500, """{"ok":false,"error":"internal"}""") }
+        } finally {
+            ex.close()
+        }
+    }
+
+    private fun BridgeTaskDto.toJson(): JSONObject = JSONObject()
+        .put("id", id)
+        .put("name", name)
+        .put("url", url)
+        .put("size", size)
+        .put("downloaded", downloaded)
+        .put("status", status)
+        .put("speed", speed)
+        .put("etaMs", etaMs)
+        .put("error", error)
+        .put("savePath", savePath)
+        .put("createdAt", createdAt)
 
     private fun decisionJson(decision: BrowserBridge.HookDecision): String = when (decision) {
         is BrowserBridge.HookDecision.Accept -> JSONObject()

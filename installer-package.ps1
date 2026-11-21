@@ -21,7 +21,7 @@ Write-Host ""
 Write-Host "[1/3] Building portable distribution first..." -ForegroundColor Cyan
 $prevEap = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
-& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root "portable-package.ps1") 2>&1 | ForEach-Object { Write-Host $_ }
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root "portable-package.ps1")
 $portableExit = $LASTEXITCODE
 $ErrorActionPreference = $prevEap
 if ($portableExit -ne 0) { throw "portable package failed with exit $portableExit" }

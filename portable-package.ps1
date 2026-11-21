@@ -296,6 +296,32 @@ Copy-Item $launcherTmp $launcherExe -Force
 if ($LASTEXITCODE -ne 0) { throw "launcher compile failed with exit $LASTEXITCODE" }
 Write-Host "Custom launcher installed: $launcherExe" -ForegroundColor Green
 
+# ---- [4c/5] YunX Fetch native messaging host（按需唤醒 Mini / 完整版）----
+Write-Host ""
+Write-Host "[4c/5] Building YunX Fetch native host..." -ForegroundColor Cyan
+$nativeSrc = Join-Path $root "browser-extension\native-host\YunX-MiniHost.cs"
+$nativeDir = Join-Path $outDir "native-host"
+if (Test-Path $nativeSrc) {
+    New-Item -ItemType Directory -Force -Path $nativeDir | Out-Null
+    $nativeExe = Join-Path $nativeDir "YunX-MiniHost.exe"
+    & $csc /nologo /target:winexe /platform:x64 /optimize+ "/out:$nativeExe" "$nativeSrc"
+    if ($LASTEXITCODE -ne 0) { throw "native host compile failed with exit $LASTEXITCODE" }
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    # 便携包会被拷到任意目录，host 配置只写相对路径，由 native host 相对自身目录解析；
+    # 绝不能把打包机的绝对路径（如 E:\ai项目\...）带出去，否则换台机器就 app-not-found。
+    $nativeConfig = @{ appExe = "..\YunX-WIN.exe"; miniArgs = @("--mini") } | ConvertTo-Json -Compress
+    [System.IO.File]::WriteAllText((Join-Path $nativeDir "host.config.json"), $nativeConfig, $utf8NoBom)
+    $extIdFile = Join-Path $root "browser-extension\EXTENSION_ID"
+    $extId = if (Test-Path $extIdFile) { (Get-Content $extIdFile -Raw).Trim() } else { "" }
+    # 不预生成 com.yunx.mini.json：清单里的 path 必须是安装后的绝对路径，
+    # 由 install-native-host.ps1（便携版）或安装包（安装版）在目标机器上按真实路径生成。
+    Copy-Item (Join-Path $root "browser-extension\native-host\install-native-host.ps1") $nativeDir -Force
+    Copy-Item (Join-Path $root "browser-extension\native-host\com.yunx.mini.json.in") $nativeDir -Force
+    Write-Host "Native host installed: $nativeExe (extension id: $extId)" -ForegroundColor Green
+} else {
+    Write-Host "  native host source not found, skipped: $nativeSrc" -ForegroundColor Yellow
+}
+
 Write-Host ""
 Write-Host "[5/5] Extracting Skiko native resources (DLL/icudtl.dat) + darkmode.dll..." -ForegroundColor Cyan
 Add-Type -AssemblyName System.IO.Compression.FileSystem

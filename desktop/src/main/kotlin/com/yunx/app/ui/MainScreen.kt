@@ -64,10 +64,15 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import com.yunx.app.AppContext
 import com.yunx.app.data.announcement.AnnouncementReadStore
 import com.yunx.app.data.backup.AuthBackupManager
 import com.yunx.app.data.bridge.BrowserBridge
+import com.yunx.app.data.bridge.BridgeEnqueueRequest
+import com.yunx.app.data.bridge.BridgeTaskController
+import com.yunx.app.data.bridge.BridgeTaskDto
 import com.yunx.app.data.db.AppDatabase
 import com.yunx.app.data.download.ChunkDownloader
 import com.yunx.app.data.download.DownloadManager
@@ -1337,6 +1342,108 @@ fun MainScreen(
                 }
             }
             onDispose { BrowserHookController.onAccept = null }
+        }
+
+        // 扩展下载中心 ↔ 完整版任务管理：列表、暂停/继续/重试/删除/打开/所在文件夹、静默入队。
+        // 只做桥接，不改变桌面 UI 的既有行为。
+        DisposableEffect(Unit) {
+            BridgeTaskController.snapshotProvider = {
+                val currentStats = downloadManager.stats.value
+                runBlocking { downloadManager.tasks.first() }.map { task ->
+                    val stat = currentStats[task.id]
+                    val status = when (task.status) {
+                        DownloadTaskEntity.STATUS_PENDING -> "pending"
+                        DownloadTaskEntity.STATUS_DOWNLOADING -> "downloading"
+                        DownloadTaskEntity.STATUS_PAUSED -> "paused"
+                        DownloadTaskEntity.STATUS_COMPLETED -> "completed"
+                        DownloadTaskEntity.STATUS_FAILED -> "failed"
+                        else -> "pending"
+                    }
+                    BridgeTaskDto(
+                        id = task.id,
+                        name = task.fileName,
+                        url = task.url,
+                        size = task.totalSize,
+                        downloaded = task.downloadedSize,
+                        status = status,
+                        speed = stat?.speed ?: 0L,
+                        etaMs = stat?.remainMillis?.takeIf { it > 0 } ?: 0L,
+                        error = task.errorMsg,
+                        savePath = task.savePath,
+                        createdAt = task.createTime
+                    )
+                }
+            }
+            BridgeTaskController.actionHandler = { id, action, deleteLocal ->
+                val task = runBlocking { downloadManager.tasks.first() }.firstOrNull { it.id == id }
+                when (action) {
+                    "pause" -> {
+                        downloadViewModel.pause(id)
+                        true
+                    }
+                    "resume" -> {
+                        downloadViewModel.resume(id)
+                        true
+                    }
+                    "retry" -> {
+                        if (task != null) downloadViewModel.redownload(task)
+                        task != null
+                    }
+                    "remove" -> {
+                        downloadViewModel.remove(id, deleteLocal)
+                        true
+                    }
+                    "open" -> {
+                        val path = task?.savePath.orEmpty()
+                        path.isNotBlank() && DesktopActions.openFile(path)
+                    }
+                    "reveal" -> {
+                        val path = task?.savePath.orEmpty()
+                        path.isNotBlank() && DesktopActions.revealFile(path)
+                    }
+                    else -> false
+                }
+            }
+            BridgeTaskController.enqueueHandler = { req ->
+                scope.launch {
+                    try {
+                        downloadManager.enqueue(
+                            url = req.url,
+                            fileName = req.fileName,
+                            headers = req.headers,
+                            size = req.fileSize.takeIf { it > 0 } ?: -1L,
+                            platform = req.platform.ifBlank { DownloadPlatform.BROWSER },
+                            saveDir = req.saveDir,
+                            threads = req.threads
+                        )
+                        currentTab = MainTab.Download
+                        SnackbarController.show("已交给 YunX 下载：${req.fileName}")
+                    } catch (e: Exception) {
+                        SnackbarController.show("入队失败：${e.message ?: "未知错误"}")
+                    }
+                }
+                true
+            }
+            BridgeTaskController.resolveHandler = { url, title ->
+                scope.launch {
+                    resolveViewModel.startResolve(url, "")
+                    currentTab = MainTab.Resolve
+                    if (title.isNotBlank()) SnackbarController.show("正在解析：$title")
+                }
+                true
+            }
+            BrowserBridge.onResolveRequest = { req ->
+                scope.launch {
+                    resolveViewModel.startResolve(req.url, "")
+                    currentTab = MainTab.Resolve
+                    if (req.title.isNotBlank()) SnackbarController.show("正在解析：${req.title}")
+                }
+                true
+            }
+            onDispose {
+                BridgeTaskController.clear()
+                BrowserBridge.onResolveRequest = null
+            }
         }
 
         // 浏览器插件「B 站专属页」提交的解析下载：插件页已选好清晰度与下载方式，

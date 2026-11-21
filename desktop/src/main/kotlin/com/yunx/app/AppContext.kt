@@ -20,9 +20,21 @@ import java.util.prefs.Preferences
  */
 object AppContext {
 
-    /** 应用数据根目录：默认 <用户目录>/.yunx-win；可用环境变量 YUNX_WIN_DATA_DIR 覆盖（测试/沙箱环境用） */
-    val dataDir: File = System.getenv("YUNX_WIN_DATA_DIR")?.let { File(it) }
-        ?: File(System.getProperty("user.home"), ".yunx-win")
+    /**
+     * 是否为 YunX Mini 无界面模式（由 `Main.kt` 在访问本对象前设置系统属性 `yunx.mode=mini`）。
+     * Mini 使用独立的数据目录与偏好节点，避免与完整版同时运行时互相覆盖。
+     */
+    val isMini: Boolean = System.getProperty("yunx.mode") == "mini"
+
+    private val prefRoot: String = if (isMini) "yunx-mini" else "yunx-win"
+
+    /** 应用数据根目录：完整版默认 <用户目录>/.yunx-win；Mini 默认 <用户目录>/.yunx-mini（可用环境变量覆盖） */
+    val dataDir: File = when {
+        isMini -> System.getenv("YUNX_MINI_DATA_DIR")?.let { File(it) }
+            ?: File(System.getProperty("user.home"), ".yunx-mini")
+        else -> System.getenv("YUNX_WIN_DATA_DIR")?.let { File(it) }
+            ?: File(System.getProperty("user.home"), ".yunx-win")
+    }
 
     /** 旧版数据根目录（.yunx-pc）：首次启动时整体迁移到新目录 */
     private val legacyDataDir: File = File(System.getProperty("user.home"), ".yunx-pc")
@@ -30,7 +42,7 @@ object AppContext {
     // ---------- 杂项偏好（必须在下面解析目录之前声明：Kotlin 单例按声明顺序初始化）----------
 
     /** 杂项偏好（原 "yunx_prefs" SharedPreferences：onboarding_shown / ignored_version） */
-    val miscPrefs: Preferences = Preferences.userRoot().node("yunx-win/misc")
+    val miscPrefs: Preferences = Preferences.userRoot().node("$prefRoot/misc")
 
     /**
      * 设置偏好：与 [com.yunx.app.data.prefs.SettingsRepository] **共用同一个节点**。
@@ -39,10 +51,10 @@ object AppContext {
      *   所以 AppContext 直接读这个节点 —— 若自己另开一个节点，就会出现「设置页写进 A、这里读 B」，
      *   表现为切换目录后重启仍显示「当前生效（重启前）」（读不到配置 → 一直回退默认）。
      */
-    val settingsPrefs: Preferences = Preferences.userRoot().node("yunx-win/settings")
+    val settingsPrefs: Preferences = Preferences.userRoot().node("$prefRoot/settings")
 
     /** 迅雷设备指纹偏好（原 "xunlei_device_fp"） */
-    val xunleiFpPrefs: Preferences = Preferences.userRoot().node("yunx-win/xunlei_fp")
+    val xunleiFpPrefs: Preferences = Preferences.userRoot().node("$prefRoot/xunlei_fp")
 
     // ---------- 可在应用内更改的目录 ----------
 
@@ -73,7 +85,7 @@ object AppContext {
     internal const val KEY_CACHE_MIGRATED_FROM = "storage_cache_migrated_from"
 
     fun init() {
-        migrateLegacyDataDir()
+        if (!isMini) migrateLegacyDataDir()
         listOf(dataDir, dbDir, cacheDir, downloadTmpDir, mergeDir, filesDir).forEach { it.mkdirs() }
         cleanupMigratedStorage()
     }

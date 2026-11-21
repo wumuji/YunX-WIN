@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>YunX Fetch · 下载浮窗</title>
+  <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+  <header class="p-head">
+    <div class="p-brand">
+      <img src="icons/icon48.png" alt="" width="22" height="22">
+      <strong>YunX Fetch</strong>
+      <span class="p-count" id="p-count">0</span>
+    </div>
+    <div class="p-actions">
+      <button class="p-ghost" id="p-center" title="打开完整下载中心">下载中心</button>
+      <button class="p-icon" id="p-close" title="关闭浮窗">×</button>
+    </div>
+  </header>
+
+  <main class="p-body">
+    <div class="p-empty" id="p-empty" hidden>
+      <div class="p-empty-title">暂无下载任务</div>
+      <div class="p-empty-sub">在网页中点击下载，任务会出现在这里</div>
+    </div>
+    <div class="p-list" id="p-list"></div>
+  </main>
+
+  <footer class="p-foot" id="p-foot" hidden>
+    <span id="p-speed">—</span>
+    <span id="p-summary"></span>
+  </footer>
+
+  <script type="module" src="panel.js"></script>
+</body>
+</html>

@@ -1,0 +1,191 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f6f7fb;
+  --panel: #ffffff;
+  --text: #1b1f27;
+  --sub: #6b7280;
+  --line: #e5e7ef;
+  --brand: #2f6bff;
+  --danger: #e5484d;
+  --ok: #16a34a;
+  --radius: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161c;
+    --panel: #1c1f27;
+    --text: #e6e8ef;
+    --sub: #9aa1ae;
+    --line: #2a2e38;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.45 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+.p-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.p-brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.p-brand strong { font-size: 13px; font-weight: 600; }
+
+.p-count {
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.p-actions { display: flex; align-items: center; gap: 6px; }
+
+.p-ghost {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  border-radius: 7px;
+  padding: 4px 9px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.p-ghost:hover { border-color: var(--brand); color: var(--brand); }
+
+.p-icon {
+  border: 0;
+  background: transparent;
+  color: var(--sub);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.p-body { flex: 1; overflow-y: auto; padding: 8px; }
+
+.p-list { display: flex; flex-direction: column; gap: 8px; }
+
+.p-item {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 9px 10px;
+}
+
+.p-item-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.p-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.p-tag {
+  flex: none;
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--brand) 14%, transparent);
+  color: var(--brand);
+}
+
+.p-tag.browser { background: color-mix(in srgb, #8b5cf6 16%, transparent); color: #8b5cf6; }
+.p-tag.failed { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+.p-tag.completed { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+
+.p-bar {
+  position: relative;
+  height: 5px;
+  margin: 7px 0 5px;
+  border-radius: 3px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.p-bar > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background: var(--brand);
+  border-radius: 3px;
+}
+
+.p-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--sub);
+}
+
+.p-btns { display: flex; gap: 6px; margin-top: 6px; }
+
+.p-btn {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  border-radius: 7px;
+  padding: 4px 0;
+  font-size: 11.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.p-btn:hover:not(:disabled) { border-color: var(--brand); color: var(--brand); }
+.p-btn.danger:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+.p-btn:disabled { opacity: .45; cursor: default; }
+
+.p-empty { padding: 34px 16px; text-align: center; color: var(--sub); }
+.p-empty-title { font-size: 13px; margin-bottom: 4px; color: var(--text); }
+.p-empty-sub { font-size: 11.5px; }
+
+.p-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  font-size: 11.5px;
+  color: var(--sub);
+}

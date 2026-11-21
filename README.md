@@ -22,7 +22,7 @@
 - 多账号与主账号切换；内嵌 Chromium 登录、导入本机浏览器 Cookie、手动 Cookie
 - GitHub 仓库树 / Releases / README 渲染 / 镜像测速
 - 系统托盘、Windows 通知中心进度、剪贴板链接提示
-- 浏览器扩展：资源嗅探与下载接管
+- 浏览器扩展 YunX Fetch：下载接管、独立下载中心、资源嗅探；直链交给低占用引擎 YunX Mini
 
 ## 系统要求
 

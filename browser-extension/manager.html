@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="auto">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YunX Fetch · 下载中心</title>
+  <link rel="stylesheet" href="manager.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <img src="icons/icon48.png" alt="" width="34" height="34">
+        <div>
+          <div class="brand-title">YunX Fetch</div>
+          <div class="brand-sub">云析下载中心</div>
+        </div>
+      </div>
+      <div class="engine-strip" id="engine-strip">
+        <span class="engine-chip" data-engine="mini"><i class="dot"></i>Mini</span>
+        <span class="engine-chip" data-engine="full"><i class="dot"></i>完整版</span>
+        <span class="engine-chip browser"><i class="dot"></i>浏览器</span>
+      </div>
+      <div class="top-actions">
+        <div class="speed" id="total-speed">—</div>
+        <button class="icon-btn" id="btn-refresh" title="刷新" aria-label="刷新">⟳</button>
+        <button class="primary-btn" id="btn-settings">设置</button>
+      </div>
+    </header>
+
+    <section class="stats">
+      <div class="stat-card">
+        <span class="stat-label">下载中</span>
+        <strong class="stat-value" id="stat-downloading">0</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">已完成</span>
+        <strong class="stat-value" id="stat-completed">0</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">失败</span>
+        <strong class="stat-value" id="stat-failed">0</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">已暂停</span>
+        <strong class="stat-value" id="stat-paused">0</strong>
+      </div>
+    </section>
+
+    <section class="toolbar">
+      <div class="tabs" id="status-tabs">
+        <button class="tab active" data-filter="all">全部</button>
+        <button class="tab" data-filter="downloading">下载中</button>
+        <button class="tab" data-filter="completed">已完成</button>
+        <button class="tab" data-filter="failed">失败</button>
+        <button class="tab" data-filter="paused">已暂停</button>
+      </div>
+      <div class="toolbar-right">
+        <label class="field compact">
+          <span>来源</span>
+          <select id="source-filter">
+            <option value="all">全部</option>
+            <option value="mini">YunX Mini</option>
+            <option value="full">YunX 完整版</option>
+            <option value="browser">浏览器</option>
+          </select>
+        </label>
+        <label class="field compact">
+          <span>排序</span>
+          <select id="sort-select">
+            <option value="status">状态优先</option>
+            <option value="time">最新优先</option>
+            <option value="name">名称</option>
+            <option value="size">大小</option>
+            <option value="progress">进度</option>
+          </select>
+        </label>
+        <input id="search-input" class="search" type="search" placeholder="搜索文件名、链接或站点">
+      </div>
+    </section>
+
+    <div class="batchbar" id="batchbar" hidden>
+      <span id="batch-count">已选择 0 项</span>
+      <div class="batch-actions">
+        <button class="ghost-btn" data-batch="pause">暂停</button>
+        <button class="ghost-btn" data-batch="resume">继续</button>
+        <button class="ghost-btn danger" data-batch="remove">删除</button>
+        <button class="ghost-btn" data-batch="clear">取消选择</button>
+      </div>
+    </div>
+
+    <main class="list-wrap">
+      <div class="empty" id="empty-state" hidden>
+        <div class="empty-icon">⇣</div>
+        <h2 id="empty-title">暂无下载任务</h2>
+        <p id="empty-desc">在网页中点击下载，YunX Fetch 会自动接管并显示在这里。</p>
+        <div class="empty-actions">
+          <button class="primary-btn" id="btn-wake-mini">启动 YunX Mini</button>
+          <button class="ghost-btn" id="btn-wake-full">启动完整版</button>
+        </div>
+      </div>
+      <div class="task-list" id="task-list"></div>
+      <button class="ghost-btn clear-btn" id="btn-clear-completed" hidden>清除已完成</button>
+    </main>
+  </div>
+
+  <div class="drawer-mask" id="drawer-mask" hidden></div>
+  <aside class="drawer" id="settings-drawer" aria-hidden="true">
+    <div class="drawer-head">
+      <h2>设置</h2>
+      <button class="icon-btn" id="btn-close-settings" aria-label="关闭">×</button>
+    </div>
+    <div class="drawer-body">
+      <section class="setting-group">
+        <h3>下载接管</h3>
+        <label class="switch-row">
+          <span>启用 YunX Fetch</span>
+          <input type="checkbox" id="sw-enabled">
+        </label>
+        <label class="switch-row">
+          <span>接管浏览器下载</span>
+          <input type="checkbox" id="sw-takeover">
+        </label>
+        <label class="switch-row">
+          <span>嗅探页面资源</span>
+          <input type="checkbox" id="sw-sniff">
+        </label>
+        <label class="switch-row">
+          <span>隐藏 Edge 下载气泡</span>
+          <input type="checkbox" id="sw-hide-ui">
+        </label>
+        <div class="native-meta" id="ui-permission">下载气泡权限：检测中…</div>
+        <label class="switch-row">
+          <span>下载时弹出下载浮窗</span>
+          <input type="checkbox" id="sw-panel">
+        </label>
+        <label class="switch-row">
+          <span>完成/失败通知</span>
+          <input type="checkbox" id="sw-notify">
+        </label>
+      </section>
+
+      <section class="setting-group">
+        <h3>任务管理</h3>
+        <label class="switch-row">
+          <span>删除任务时同时删除本地文件</span>
+          <input type="checkbox" id="sw-delete-file">
+        </label>
+        <div class="native-meta">关闭时只移除任务记录，已下载的文件会保留。</div>
+        <label class="switch-row danger">
+          <span>删除时不显示警告窗</span>
+          <input type="checkbox" id="sw-skip-confirm">
+        </label>
+        <div class="native-meta">开启后删除任务会立即执行，不再弹出二次确认。</div>
+      </section>
+
+      <section class="setting-group">
+        <h3>下载引擎</h3>
+        <label class="field">
+          <span>路由优先级</span>
+          <select id="route-mode">
+            <option value="auto">自动：Mini → 完整版 → 浏览器</option>
+            <option value="mini">仅优先 YunX Mini</option>
+            <option value="full">仅优先完整版</option>
+            <option value="browser">仅浏览器原生</option>
+          </select>
+        </label>
+        <label class="switch-row">
+          <span>下载时自动唤醒 Mini</span>
+          <input type="checkbox" id="sw-wake-mini">
+        </label>
+        <label class="switch-row">
+          <span>不支持时自动唤醒完整版</span>
+          <input type="checkbox" id="sw-wake-full">
+        </label>
+        <div class="engine-card" data-card="mini">
+          <div>
+            <strong>YunX Mini</strong>
+            <div class="engine-meta" id="mini-meta">未连接</div>
+          </div>
+          <button class="ghost-btn" data-wake="mini">唤醒</button>
+        </div>
+        <div class="engine-card" data-card="full">
+          <div>
+            <strong>YunX 完整版</strong>
+            <div class="engine-meta" id="full-meta">未连接</div>
+          </div>
+          <button class="ghost-btn" data-wake="full">唤醒</button>
+        </div>
+        <div class="native-meta" id="native-meta">Native Host：检测中…</div>
+      </section>
+
+      <section class="setting-group" id="mini-settings-group">
+        <h3>Mini 参数</h3>
+        <div class="grid-2">
+          <label class="field">
+            <span>线程数</span>
+            <input type="number" id="mini-threads" min="1" max="512" step="1">
+          </label>
+          <label class="field">
+            <span>任务并发</span>
+            <input type="number" id="mini-concurrency" min="1" max="10" step="1">
+          </label>
+          <label class="field">
+            <span>限速（KB/s，0 不限）</span>
+            <input type="number" id="mini-speed" min="0" step="64">
+          </label>
+          <label class="field">
+            <span>失败重试</span>
+            <input type="number" id="mini-retry" min="0" max="10" step="1">
+          </label>
+          <label class="field">
+            <span>空闲退出（分钟，0 不退出）</span>
+            <input type="number" id="mini-idle" min="0" max="120" step="1">
+          </label>
+        </div>
+        <label class="field">
+          <span>保存目录（留空使用默认）</span>
+          <input type="text" id="mini-savedir" placeholder="例如 D:\Downloads">
+        </label>
+        <button class="ghost-btn" id="btn-save-mini">保存 Mini 参数</button>
+      </section>
+
+      <section class="setting-group">
+        <h3>站点规则</h3>
+        <p class="hint">默认接管所有站点下载；设为“放行”后该站点走浏览器原生下载。</p>
+        <div class="site-add">
+          <input type="text" id="site-domain" placeholder="example.com">
+          <select id="site-mode">
+            <option value="takeover">接管</option>
+            <option value="passthrough">放行</option>
+          </select>
+          <button class="ghost-btn" id="btn-add-site">添加</button>
+        </div>
+        <div class="site-list" id="site-list"></div>
+      </section>
+
+      <section class="setting-group">
+        <h3>外观</h3>
+        <label class="field">
+          <span>主题</span>
+          <select id="theme-mode">
+            <option value="auto">跟随系统</option>
+            <option value="light">亮色</option>
+            <option value="dark">暗色</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="setting-group about">
+        <h3>关于</h3>
+        <p class="hint">YunX Fetch 2.0 · 本地下载接管与任务聚合。所有数据仅保存在本机，不上传任何服务器。</p>
+        <p class="hint">扩展无法替换 edge://downloads 页面；下载中心通过快捷键 Ctrl+Shift+Y 或工具栏按钮打开。</p>
+      </section>
+    </div>
+  </aside>
+
+  <div class="toast" id="toast" hidden></div>
+  <script type="module" src="manager.js"></script>
+</body>
+</html>

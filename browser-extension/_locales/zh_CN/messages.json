@@ -1,10 +1,10 @@
 {
   "extName": {
-    "message": "云析下载助手（YunX WIN）",
+    "message": "YunX Fetch · 云析下载",
     "description": "扩展名称"
   },
   "extDescription": {
-    "message": "嗅探网页资源并接管浏览器下载，交给 YunX WIN 多线程下载；支持一键归还浏览器下载。",
+    "message": "云析下载助手：接管浏览器下载，连接 YunX Mini 多线程引擎与 YunX 完整版，提供独立的下载中心。",
     "description": "扩展简介"
   }
 }

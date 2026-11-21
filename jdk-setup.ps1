@@ -7,6 +7,15 @@ function Find-JdkHome {
     $marker = if ($RequireJPackage) { "bin\jpackage.exe" } else { "bin\java.exe" }
 
     $candidates = @(
+        # 构建要求 JDK 21（见 desktop/build.gradle.kts 的 jvmToolchain(21)），优先使用
+        "C:\Program Files\Microsoft\jdk-21*",
+        "C:\Program Files\Java\jdk-21*",
+        "C:\Program Files\Eclipse Adoptium\jdk-21*",
+        "C:\Program Files\Eclipse Foundation\jdk-21*",
+        "C:\Program Files\Zulu\zulu-21*",
+        "C:\Program Files\Amazon Corretto\jdk-21*",
+        (Join-Path $env:LOCALAPPDATA "jdk-portable\jdk-21*"),
+        (Join-Path $PSScriptRoot ".jdk\jdk-21*"),
         "C:\Program Files\Microsoft\jdk-17*",
         "C:\Program Files\Java\jdk-17*",
         "C:\Program Files\Eclipse Adoptium\jdk-17*",

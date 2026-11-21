@@ -53,8 +53,8 @@ namespace YunXDesktop
             try { SetProcessDPIAware(); } catch { }
             Application.EnableVisualStyles();
 
-            // 诊断冒烟模式：无 UI、无闪屏
-            if (Array.IndexOf(args, "--jcef-smoke") >= 0)
+            // 诊断冒烟模式 / YunX Mini：无 UI、无闪屏
+            if (Array.IndexOf(args, "--jcef-smoke") >= 0 || Array.IndexOf(args, "--mini") >= 0)
                 return RunJava(args, false);
 
             // 启动闪屏跑在主线程消息循环；JVM 创建与窗口检测在后台线程

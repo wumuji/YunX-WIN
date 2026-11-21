@@ -462,7 +462,9 @@ class DownloadManager(
         // 不再另算一套 EMA —— 否则两处数字永远对不上
         val speed = _stats.value.values.sumOf { it.speed }
         val speedText = if (showSpeedProvider() && speed > 0) "${formatSpeed(speed)} ↓" else ""
-        WindowsToastNotifier.updateProgress(doneSum, totalSum, line1, statusLine, speedText, "正在下载")
+        if (!AppContext.isMini) {
+            WindowsToastNotifier.updateProgress(doneSum, totalSum, line1, statusLine, speedText, "正在下载")
+        }
     }
 
     private fun formatSize(bytes: Long): String {
@@ -1033,16 +1035,20 @@ class DownloadManager(
     /** 任务开始/结束计数 + Windows 系统集成（阻止休眠 / 通知中心进度） */
     private suspend fun onTaskStarted(id: Long) {
         activeTaskCount.getAndIncrement()
-        if (keepAwakeProvider()) WindowsKeepAwake.acquire()
-        WindowsToastNotifier.sessionStart()
+        if (!AppContext.isMini) {
+            if (keepAwakeProvider()) WindowsKeepAwake.acquire()
+            WindowsToastNotifier.sessionStart()
+        }
     }
 
     private fun onTaskFinished(id: Long) {
         toastMeta.remove(id)
         if (activeTaskCount.decrementAndGet() <= 0) {
             activeTaskCount.set(0)
-            WindowsKeepAwake.release()
-            WindowsToastNotifier.sessionEnd()
+            if (!AppContext.isMini) {
+                WindowsKeepAwake.release()
+                WindowsToastNotifier.sessionEnd()
+            }
         }
     }
 

@@ -2,9 +2,9 @@
   "manifest_version": 3,
   "default_locale": "zh_CN",
   "name": "__MSG_extName__",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "__MSG_extDescription__",
-  "minimum_chrome_version": "102",
+  "minimum_chrome_version": "105",
   "permissions": [
     "downloads",
     "storage",
@@ -12,23 +12,42 @@
     "webRequest",
     "cookies",
     "contextMenus",
-    "scripting"
+    "scripting",
+    "notifications",
+    "alarms",
+    "nativeMessaging"
+  ],
+  "optional_permissions": [
+    "downloads.ui"
   ],
   "host_permissions": [
     "<all_urls>",
     "http://127.0.0.1/*"
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "src/background/index.js",
+    "type": "module"
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "云析下载助手",
+    "default_title": "YunX Fetch",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
+    }
+  },
+  "options_ui": {
+    "page": "manager.html",
+    "open_in_tab": true
+  },
+  "commands": {
+    "open-manager": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Y"
+      },
+      "description": "打开云析下载中心"
     }
   },
   "icons": {
@@ -40,9 +59,10 @@
   "content_scripts": [
     {
       "matches": ["http://*/*", "https://*/*"],
-      "js": ["content.js"],
+      "js": ["content.js", "bubble.js"],
       "run_at": "document_idle",
       "all_frames": false
     }
-  ]
+  ],
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA3FbETUSmFOrh+aWyTpZ4h+N3d2EZ340MDCYYsQK7S60ZddhPLcIdZJi9HNjbXqhut3k59t1mHMQ/9hSCCqVzO0ERojh4N9Tocxb1NsTdeN9GYXr/QiKjf7pw91e0fCBndXw0i8i8CLW9MEJpDVP/gNUkN9HZcglpsewns4PnDSuSTTn5VbvZzpBVThHEG3n4UoAtywKecHglD/r7Rpx9PIrASbrmySd7p+m9KlY8LP7S3Ja9p5sWvTK6rAtYfHgHDvZFhl+ky/sQdKRJOJTgCheP//VO2N2CB8vTBPFqs48Vo1PhbXN/Rs+xQeHFH4aSdBvpSG2ofv49FaMPLj9KiQIDAQAB"
 }

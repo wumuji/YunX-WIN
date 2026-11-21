@@ -32,6 +32,14 @@ import androidx.compose.ui.graphics.toComposeImageBitmap
 // 关掉「退出时弹原生 Error 对话框」这个默认行为（见 application{} 里的 windowErrorHandler）
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 fun main(args: Array<String>) {
+    // YunX Mini：无界面精简下载引擎。必须在 AppContext 首次访问前设置模式，
+    // 以便使用独立的 .yunx-mini 数据目录与设置节点；不初始化 Compose / JCEF / 托盘。
+    if (args.any { it == "--mini" }) {
+        System.setProperty("yunx.mode", "mini")
+        runMini(args)
+        return
+    }
+
     // 渲染后端：默认 OPENGL（GPU 渲染，动画流畅且文字清晰，2026-09-05 用户实测确认）。
     // 实测数据（125% DPI）：SOFTWARE 每帧 CPU 光栅化约 130 万像素，设置/下载页持续交互只有
     // ~10 FPS 且 UI 线程饱和；DIRECT3D 动画流畅但文字灰度发虚且 hinting 调节无效；
